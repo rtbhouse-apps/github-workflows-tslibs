@@ -1,0 +1,12 @@
+name: "Should publish package"
+description: "Check if a package with a given version should be published"
+inputs:
+  repository-url:
+    description: "The URL of the repository to check"
+    required: true
+  repository-token:
+    description: "The token to use to authenticate to the NPM repository"
+    required: true
+runs:
+  using: "node16"
+  main: "../lib/should-publish-package-action/index.js"

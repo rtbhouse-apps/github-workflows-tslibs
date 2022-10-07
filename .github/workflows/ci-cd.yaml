@@ -1,0 +1,315 @@
+name: "CI / CD"
+
+on:
+  workflow_call:
+    inputs:
+      ci-runs-on:
+        description: "The machine on which the CI will be run"
+        required: false
+        default: "ubuntu-22.04"
+        type: "string"
+      publish-repository:
+        description: "The repository to which the package will be published"
+        required: false
+        default: "rtbhouse-apps"
+        type: "string"
+      
+defaults:
+  run:
+    shell: "bash"
+
+env:
+  NODE_VERSION: "16"
+
+jobs:
+  prepare:
+    name: "Prepare"
+    runs-on: "ubuntu-22.04"
+    outputs:
+      publish-repo-url: "${{ steps.choose-publish-repo.outputs.publish-repo-url }}"
+      publish-repo-secret: "${{ steps.choose-publish-repo.outputs.publish-repo-secret }}"
+      get-config: "${{ steps.should-get-config.outputs.get-config }}"
+      perform-tests: "${{ steps.should-perform-tests.outputs.perform-tests }}"
+      perform-lint: "${{ steps.should-perform-lint.outputs.perform-lint }}"
+      docker-image-name: "${{ steps.get-docker-image-name.outputs.docker-image-name }}"
+
+    steps:
+      - name: "Choose publish repo"
+        id: "choose-publish-repo"
+        run: |
+          echo "::set-output name=publish-repo-url::https://npm.pkg.github.com/"
+          echo "::set-output name=publish-repo-secret::GITHUB_REGISTRY_RW_TOKEN"
+      
+      - name: "Checkout"
+        uses: "actions/checkout@v3"
+
+      - name: "Should get config"
+        id: "should-get-config"
+        run: |
+          if [ -f ./bin/ci/get_config.sh ]; then
+            GET_CONFIG=1
+          else
+            GET_CONFIG=0
+          fi
+          echo "::set-output name=get-config::${GET_CONFIG}"
+
+      - name: "Should perform tests"
+        id: "should-perform-tests"
+        run: |
+          if [ -f ./bin/ci/test.sh ]; then
+            TEST=1
+          else
+            TEST=0
+          fi
+          echo "::set-output name=perform-tests::${TEST}"
+
+          if [ ${TEST} == 0 ]; then
+            echo "::warning::No test script has been defined in this repository"
+          fi
+
+      - name: "Should perform lint"
+        id: "should-perform-lint"
+        run: |
+          if [ -f ./bin/ci/lint.sh ]; then
+            LINT=1
+          else
+            LINT=0
+          fi
+          echo "::set-output name=perform-lint::${LINT}"
+
+          if [ ${LINT} == 0 ]; then
+            echo "::warning::No lint script has been defined in this repository"
+          fi
+      
+      - name: "Get docker image name"
+        id: "get-docker-image-name"
+        run: |
+          DOCKER_IMAGE_NAME=$(yq -e '.services.tslib.image | split(":").0' docker-compose.yaml)
+          echo "::set-output name=docker-image-name::$DOCKER_IMAGE_NAME"
+        if: >
+          steps.should-perform-tests.outputs.perform-tests
+          || steps.should-perform-tests.outputs.perform-lint
+
+
+  ci:
+    name: "CI"
+    runs-on: "${{ inputs.ci-runs-on }}"
+    needs: ["prepare"]
+    if: >
+      needs.prepare.outputs.perform-lint == 1
+      || needs.prepare.outputs.perform-tests == 1
+
+    env:
+      DOCKER_TAG: "${{ github.sha }}"
+      DOCKER_IMAGE: "${{ needs.prepare.outputs.docker-image-name }}"
+
+    permissions:
+      contents: "read"
+      id-token: "write"
+
+    steps:
+      - name: "Checkout"
+        uses: "actions/checkout@v3"
+
+      - name: "Set dev docker image metadata"
+        id: "docker-metadata"
+        uses: "docker/metadata-action@v4"
+        with:
+          images: |
+            ${{ env.DOCKER_IMAGE }}
+          tags: |
+            type=raw,value=${{ env.DOCKER_TAG }}
+
+      # workaround for: https://github.com/actions-runner-controller/actions-runner-controller/issues/893
+      - name: Set up Docker Context for Buildx
+        id: buildx-context
+        run: |
+          docker context create builders
+
+      - name: "Set up Docker Buildx"
+        uses: "docker/setup-buildx-action@v2"
+        with:
+          endpoint: builders
+
+      - name: "Should login to GCP Docker Registry"
+        id: "should-login-to-gcp-docker-registry"
+        run: |
+          if grep 'FROM[[:blank:]].\+rtbhouse-apps' Dockerfile > /dev/null; then
+            echo "::set-output name=should-login::1"
+          fi
+
+      - name: "Authenticate to Google Cloud"
+        id: "gcp-auth"
+        uses: "google-github-actions/auth@v0"
+        with:
+          token_format: "access_token"
+          workload_identity_provider: "projects/716804851657/locations/global/workloadIdentityPools/github-actions-identity-pool/providers/github-identity-pool-provider"
+          service_account: "github-actions@rtbhouse-apps.iam.gserviceaccount.com"
+          create_credentials_file: true
+        if: "steps.should-login-to-gcp-docker-registry.outputs.should-login"
+
+      - name: "Login to Docker Registry"
+        uses: "docker/login-action@v2"
+        with:
+          registry: "europe-west4-docker.pkg.dev"
+          username: "oauth2accesstoken"
+          password: "${{ steps.gcp-auth.outputs.access_token }}"
+        if: "steps.should-login-to-gcp-docker-registry.outputs.should-login"
+
+      - name: "Add uid and gid env vars"
+        id: "set-uid-gid"
+        run: |
+          echo "::set-output name=uid::`id -u`"
+          echo "::set-output name=gid::`id -g`"
+
+      - name: "Build Docker image"
+        id: build-docker-image
+        uses: "docker/build-push-action@v3"
+        with:
+          build-args: |
+            UID=${{ steps.set-uid-gid.outputs.uid }}
+            GID=${{ steps.set-uid-gid.outputs.gid }}
+          push: false
+          load: true
+          tags: "${{ steps.docker-metadata.outputs.tags }}"
+          labels: "${{ steps.docker-metadata.outputs.labels }}"
+          cache-from: "type=gha"
+          cache-to: "type=gha,mode=max"
+        
+      - name: "Install"
+        run: |
+          ./bin/ci/install.sh
+
+      - name: "Lint"
+        run: |
+          ./bin/ci/lint.sh
+        if: "needs.prepare.outputs.perform-lint == 1"
+
+      - name: "Get config"
+        id: "get-config"
+        run: |
+          ./bin/ci/get_config.sh
+        if: >
+          needs.prepare.outputs.perform-tests == 1
+          && needs.prepare.outputs.get-config == 1
+          && (success()
+            || (failure()
+              && steps.build-docker-image.conclusion == 'success'))
+
+      - name: "Test"
+        run: |
+          ./bin/ci/test.sh
+        if: >
+          needs.prepare.outputs.perform-tests == 1
+          && (success()
+            || (failure()
+              && steps.build-docker-image.conclusion == 'success'))
+
+  release-package:
+    name: "Release package"
+    runs-on: "self-hosted"
+    needs: ["prepare", "ci"]
+    if: >
+      always()
+      && contains('success skipped', needs.ci.result)
+
+    permissions:
+      contents: "read"
+      id-token: "write"
+
+    steps:
+      - name: "Checkout release scripts"
+        uses: "actions/checkout@v3"
+        with:
+          repository: "rtbhouse-apps/github-workflows-tslibs"
+          ref: "v0"
+          path: "scripts"
+
+      - name: "Setup Node"
+        uses: "actions/setup-node@v3"
+        with:
+          node-version: "${{ env.NODE_VERSION }}"
+
+      - name: "Install release scripts"
+        run: |
+          cd scripts/actions
+          npm ci
+          npm run build
+          npm install -g .
+
+      - name: "Checkout"
+        uses: "actions/checkout@v3"
+        with:
+          path: "tslib"
+
+      - name: "Authenticate to Google Cloud"
+        id: "gcp-auth"
+        uses: "google-github-actions/auth@v0"
+        with:
+          token_format: "access_token"
+          workload_identity_provider: "projects/716804851657/locations/global/workloadIdentityPools/github-actions-identity-pool/providers/github-identity-pool-provider"
+          service_account: "github-actions@rtbhouse-apps.iam.gserviceaccount.com"
+
+      - name: "Get secrets"
+        id: "secrets"
+        uses: "google-github-actions/get-secretmanager-secrets@v0"
+        with:
+          secrets: |-
+            PUBLISH_REPO_CREDENTIALS:projects/rtbhouse-apps/secrets/${{ needs.prepare.outputs.publish-repo-secret }}
+
+      - name: "Log in to NPM registry"
+        run: |
+          REGISTRY_URL="${{ needs.prepare.outputs.publish-repo-url }}"
+          npm set --global @rtbhouse-apps:registry "${REGISTRY_URL}"
+          npm set --global "${REGISTRY_URL#https:}:_authToken=${{ steps.secrets.outputs.PUBLISH_REPO_CREDENTIALS }}"
+
+      - name: "Assert prod version"
+        id: "assert-prod-version"
+        run: |
+          cd tslib
+          npx assert-prod-version
+
+      - name: "Set next dev version"
+        id: "set-next-dev-version"
+        env:
+          REPOSITORY_URL: "${{ needs.prepare.outputs.publish-repo-url }}"
+          REPOSITORY_TOKEN: "${{ steps.secrets.outputs.PUBLISH_REPO_CREDENTIALS }}"
+        run: |
+          cd tslib
+          npx set-next-dev-version
+        if: "${{ !contains('refs/heads/master refs/heads/main', github.ref) }}"
+
+      - name: "Should publish package"
+        id: "should-publish-package"
+        env:
+          REPOSITORY_URL: "${{ needs.prepare.outputs.publish-repo-url }}"
+          REPOSITORY_TOKEN: "${{ steps.secrets.outputs.PUBLISH_REPO_CREDENTIALS }}"
+        run: |
+          cd tslib
+          npx should-publish-package
+
+      - name: "Publish package"
+        run: |
+          cd tslib
+          npm publish
+        if: "steps.should-publish-package.outputs.publish == 1"
+
+      - name: "Get version"
+        id: "get-version"
+        run: |
+          cd tslib
+          echo "::set-output name=version::$(jq .version package.json)"
+        if: >
+          steps.should-publish-package.outputs.publish == 1
+          && contains('refs/heads/master refs/heads/main', github.ref)
+
+      - name: Create release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.get-version.outputs.version }}
+          release_name: v${{ steps.get-version.outputs.version }}
+        if: >
+          steps.should-publish-package.outputs.publish == 1
+          && contains('refs/heads/master refs/heads/main', github.ref)

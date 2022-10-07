@@ -1,0 +1,12 @@
+name: "Assert version available"
+description: "Asserts that the version in the package.json is available on the registry"
+inputs:
+  repository-url:
+    description: "The URL of the repository to check"
+    required: true
+  repository-token:
+    description: "The token to use to authenticate to the NPM repository"
+    required: true
+runs:
+  using: "node16"
+  main: "../lib/set-next-dev-version-action/index.js"

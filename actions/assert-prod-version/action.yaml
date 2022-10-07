@@ -1,0 +1,5 @@
+name: "Assert prod version"
+description: "Asserts that the version in the package.json is a production version"
+runs:
+  using: "node16"
+  main: "../lib/assert-prod-version-action/index.js"
