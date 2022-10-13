@@ -288,6 +288,12 @@ jobs:
           cd tslib
           npx should-publish-package
 
+      - name: "Install"
+        run: |
+          cd tslib
+          npm ci
+        if: "steps.should-publish-package.outputs.publish == 1"
+
       - name: "Publish package"
         run: |
           cd tslib
