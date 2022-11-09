@@ -13,6 +13,11 @@ on:
         required: false
         default: "rtbhouse-apps"
         type: "string"
+      supports-preview:
+        description: "Whether the package supports previewing"
+        required: false
+        default: false
+        type: "boolean"
       
 defaults:
   run:
@@ -249,6 +254,7 @@ jobs:
           token_format: "access_token"
           workload_identity_provider: "projects/716804851657/locations/global/workloadIdentityPools/github-actions-identity-pool/providers/github-identity-pool-provider"
           service_account: "github-actions@rtbhouse-apps.iam.gserviceaccount.com"
+          create_credentials_file: true
 
       - name: "Get secrets"
         id: "secrets"
@@ -292,7 +298,10 @@ jobs:
         run: |
           cd tslib
           npm ci
-        if: "steps.should-publish-package.outputs.publish == 1"
+        if: >
+          steps.should-publish-package.outputs.publish == 1
+          || (inputs.supports-preview
+            && contains('refs/heads/master refs/heads/main', github.ref))
 
       - name: "Publish package"
         run: |
@@ -318,4 +327,27 @@ jobs:
           release_name: v${{ steps.get-version.outputs.version }}
         if: >
           steps.should-publish-package.outputs.publish == 1
+          && contains('refs/heads/master refs/heads/main', github.ref)
+
+      - name: "Setup gcloud"
+        uses:
+          "google-github-actions/setup-gcloud@v0"
+        if: >
+          inputs.supports-preview
+          && contains('refs/heads/master refs/heads/main', github.ref)
+
+      - name: "Build preview"
+        run: |
+          cd tslib
+          npm run build-samples
+        if: >
+          inputs.supports-preview
+          && contains('refs/heads/master refs/heads/main', github.ref)
+      
+      - name: "Upload samples to GCS"
+        run: |
+          cd tslib
+          gsutil rsync -rd samples-build gs://rtbhouse-apps-tslibs-preview/$(jq -r '.name | sub("@rtbhouse-apps/";"")' package.json)
+        if: >
+          inputs.supports-preview
           && contains('refs/heads/master refs/heads/main', github.ref)
