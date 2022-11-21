@@ -145,7 +145,7 @@ jobs:
 
       - name: "Authenticate to Google Cloud"
         id: "gcp-auth"
-        uses: "google-github-actions/auth@v0"
+        uses: "google-github-actions/auth@v1"
         with:
           token_format: "access_token"
           workload_identity_provider: "projects/716804851657/locations/global/workloadIdentityPools/github-actions-identity-pool/providers/github-identity-pool-provider"
@@ -249,7 +249,7 @@ jobs:
 
       - name: "Authenticate to Google Cloud"
         id: "gcp-auth"
-        uses: "google-github-actions/auth@v0"
+        uses: "google-github-actions/auth@v1"
         with:
           token_format: "access_token"
           workload_identity_provider: "projects/716804851657/locations/global/workloadIdentityPools/github-actions-identity-pool/providers/github-identity-pool-provider"
@@ -258,7 +258,7 @@ jobs:
 
       - name: "Get secrets"
         id: "secrets"
-        uses: "google-github-actions/get-secretmanager-secrets@v0"
+        uses: "google-github-actions/get-secretmanager-secrets@v1"
         with:
           secrets: |-
             PUBLISH_REPO_CREDENTIALS:projects/rtbhouse-apps/secrets/${{ needs.prepare.outputs.publish-repo-secret }}
