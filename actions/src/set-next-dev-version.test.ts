@@ -27,7 +27,7 @@ for (const [index, [existingVersions, gitBranch, expectedVersion]] of [
         async () => gitBranch as string,
       );
 
-      await t.notThrowsAsync(setNextDevVersion("dummy", "dummy"));
+      await t.notThrowsAsync(setNextDevVersion("dummy", "dummy", "dummy"));
 
       const packageJson = JSON.parse(await fs.readFile("package.json", "utf-8"));
       t.is(packageJson.version, expectedVersion);
@@ -44,7 +44,7 @@ test("setNextDevVersionOnMasterBranch", async (t) => {
       async () => "master",
     );
 
-    await t.throwsAsync(setNextDevVersion("dummy", "dummy"), {
+    await t.throwsAsync(setNextDevVersion("dummy", "dummy", "dummy"), {
       message: "Setting next development version can only be performed on a development branch",
     });
   });

@@ -11,7 +11,7 @@ on:
       publish-repository:
         description: "The repository to which the package will be published"
         required: false
-        default: "rtbhouse-apps"
+        default: "rtbhouse-apps-internal"
         type: "string"
       supports-preview:
         description: "Whether the package supports previewing"
@@ -24,7 +24,8 @@ defaults:
     shell: "bash"
 
 env:
-  NODE_VERSION: "16"
+  NODE_VERSION: "18"
+  NPM_VERISON: "9.2.0"
 
 jobs:
   prepare:
@@ -42,8 +43,8 @@ jobs:
       - name: "Choose publish repo"
         id: "choose-publish-repo"
         run: |
-          echo "::set-output name=publish-repo-url::https://npm.pkg.github.com/"
-          echo "::set-output name=publish-repo-secret::GITHUB_REGISTRY_RW_TOKEN"
+          echo "::set-output name=publish-repo-url::https://europe-west4-npm.pkg.dev/rtbhouse-apps/npm-internal/"
+          echo "::set-output name=publish-repo-secret::NPM_REGISTRY_WRITER_TOKEN"
       
       - name: "Checkout"
         uses: "actions/checkout@v3"
@@ -145,12 +146,11 @@ jobs:
 
       - name: "Authenticate to Google Cloud"
         id: "gcp-auth"
-        uses: "google-github-actions/auth@v0"
+        uses: "google-github-actions/auth@v1"
         with:
           token_format: "access_token"
           workload_identity_provider: "projects/716804851657/locations/global/workloadIdentityPools/github-actions-identity-pool/providers/github-identity-pool-provider"
           service_account: "github-actions@rtbhouse-apps.iam.gserviceaccount.com"
-          create_credentials_file: true
         if: "steps.should-login-to-gcp-docker-registry.outputs.should-login"
 
       - name: "Login to Docker Registry"
@@ -235,6 +235,11 @@ jobs:
         with:
           node-version: "${{ env.NODE_VERSION }}"
 
+      - name: "Update NPM"
+        run: |
+          npm install -g npm@${{ env.NPM_VERSION }}
+
+
       - name: "Install release scripts"
         run: |
           cd scripts/actions
@@ -249,25 +254,34 @@ jobs:
 
       - name: "Authenticate to Google Cloud"
         id: "gcp-auth"
-        uses: "google-github-actions/auth@v0"
+        uses: "google-github-actions/auth@v1"
         with:
           token_format: "access_token"
           workload_identity_provider: "projects/716804851657/locations/global/workloadIdentityPools/github-actions-identity-pool/providers/github-identity-pool-provider"
           service_account: "github-actions@rtbhouse-apps.iam.gserviceaccount.com"
-          create_credentials_file: true
 
       - name: "Get secrets"
         id: "secrets"
-        uses: "google-github-actions/get-secretmanager-secrets@v0"
+        uses: "google-github-actions/get-secretmanager-secrets@v1"
         with:
           secrets: |-
             PUBLISH_REPO_CREDENTIALS:projects/rtbhouse-apps/secrets/${{ needs.prepare.outputs.publish-repo-secret }}
 
+      - name: "Set login and password for repository"
+        env:
+          PUBLISH_REPO_CREDENTIALS: "${{ steps.secrets.outputs.PUBLISH_REPO_CREDENTIALS }}"
+        run: |
+          echo "LOGIN=`jq -r .login <<< ${PUBLISH_REPO_CREDENTIALS}`" >> $GITHUB_ENV
+          echo "TOKEN=`jq -r .token <<< ${PUBLISH_REPO_CREDENTIALS}`" >> $GITHUB_ENV
+
       - name: "Log in to NPM registry"
         run: |
           REGISTRY_URL="${{ needs.prepare.outputs.publish-repo-url }}"
-          npm set --global @rtbhouse-apps:registry "${REGISTRY_URL}"
-          npm set --global "${REGISTRY_URL#https:}:_authToken=${{ steps.secrets.outputs.PUBLISH_REPO_CREDENTIALS }}"
+          printf '%s\n%s\n%s\n%s\n%s\n' \
+            "@rtbhouse-apps:registry=${REGISTRY_URL}" \
+            "${REGISTRY_URL#https:}:always-auth=true" \
+            "${REGISTRY_URL#https:}:username=${LOGIN}" \
+            "${REGISTRY_URL#https:}:_password=\"${TOKEN}\"" > ~/.npmrc
 
       - name: "Assert prod version"
         id: "assert-prod-version"
@@ -279,7 +293,8 @@ jobs:
         id: "set-next-dev-version"
         env:
           REPOSITORY_URL: "${{ needs.prepare.outputs.publish-repo-url }}"
-          REPOSITORY_TOKEN: "${{ steps.secrets.outputs.PUBLISH_REPO_CREDENTIALS }}"
+          REPOSITORY_LOGIN: "${{ env.LOGIN }}"
+          REPOSITORY_PASSWORD: "${{ env.TOKEN }}"
         run: |
           cd tslib
           npx set-next-dev-version
@@ -289,7 +304,8 @@ jobs:
         id: "should-publish-package"
         env:
           REPOSITORY_URL: "${{ needs.prepare.outputs.publish-repo-url }}"
-          REPOSITORY_TOKEN: "${{ steps.secrets.outputs.PUBLISH_REPO_CREDENTIALS }}"
+          REPOSITORY_LOGIN: "${{ env.LOGIN }}"
+          REPOSITORY_PASSWORD: "${{ env.TOKEN }}"
         run: |
           cd tslib
           npx should-publish-package
@@ -331,7 +347,7 @@ jobs:
 
       - name: "Setup gcloud"
         uses:
-          "google-github-actions/setup-gcloud@v0"
+          "google-github-actions/setup-gcloud@v1"
         if: >
           inputs.supports-preview
           && contains('refs/heads/master refs/heads/main', github.ref)

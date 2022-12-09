@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@actions/core": "^1.10.0",
-    "pacote": "^14.0.0",
+    "pacote": "^15.0.0",
     "semver": "^7.3.7"
   },
   "devDependencies": {
@@ -31,7 +31,7 @@
     "@types/semver": "^7.3.12",
     "@typescript-eslint/eslint-plugin": "^5.39.0",
     "@typescript-eslint/parser": "^5.39.0",
-    "ava": "^4.3.3",
+    "ava": "^5.1.0",
     "eslint": "^8.24.0",
     "eslint-config-prettier": "^8.5.0",
     "eslint-plugin-prettier": "^4.2.1",

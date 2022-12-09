@@ -1,4 +1,4 @@
-import del from "del";
+import { deleteAsync } from "del";
 import * as fs from "fs";
 import * as _glob from "glob";
 import * as os from "os";
@@ -17,6 +17,6 @@ export async function withTmpDir<T>(body: (tmpDir: string) => Promise<T>): Promi
   const symlinkSubdir = path.join(tmpDir, "symlink");
   fs.symlinkSync(realSubdir, symlinkSubdir, "dir");
   const result = await body(symlinkSubdir);
-  await del(tmpDir, { force: true });
+  await deleteAsync(tmpDir, { force: true });
   return result;
 }

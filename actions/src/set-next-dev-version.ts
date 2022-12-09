@@ -8,7 +8,11 @@ import { getAllPackageVersions as _getAllPackageVersions, getPackageJson } from 
 const execAsync = promisify(exec);
 let [getAllPackageVersions, getGitBranch] = [_getAllPackageVersions, _getGitBranch];
 
-export async function setNextDevVersion(repositoryUrl: string, repositoryToken: string): Promise<void> {
+export async function setNextDevVersion(
+  repositoryUrl: string,
+  repositoryLogin: string,
+  repositoryPassword: string,
+): Promise<void> {
   const gitBranch = await getGitBranch();
   if (["master", "main"].includes(gitBranch)) {
     throw new Error("Setting next development version can only be performed on a development branch");
@@ -18,7 +22,7 @@ export async function setNextDevVersion(repositoryUrl: string, repositoryToken: 
   const packageName = packageJson.name;
   const currentVersion = semver.parse(packageJson.version);
   packageJson.version = (
-    await getNextDevVersion(packageName, currentVersion, gitBranch, repositoryUrl, repositoryToken)
+    await getNextDevVersion(packageName, currentVersion, gitBranch, repositoryUrl, repositoryLogin, repositoryPassword)
   ).version;
   await writeFile("package.json", JSON.stringify(packageJson));
 }
@@ -28,11 +32,17 @@ async function getNextDevVersion(
   currentVersion: semver.SemVer,
   gitBranch: string,
   repositoryUrl: string,
-  repositoryToken: string,
+  repositoryLogin: string,
+  repositoryPassword: string,
 ): Promise<semver.SemVer> {
   const currentVersionFinalized = finalizeVersion(currentVersion);
   const gitBranchTokenized = gitBranch.replace(/_|\.|\//g, "-").toLowerCase();
-  const allPackageVersions = await getAllPackageVersions(packageName, repositoryUrl, repositoryToken);
+  const allPackageVersions = await getAllPackageVersions(
+    packageName,
+    repositoryUrl,
+    repositoryLogin,
+    repositoryPassword,
+  );
   const currentDevVersions = allPackageVersions.filter(
     (version) =>
       finalizeVersion(version).version === currentVersionFinalized.version &&

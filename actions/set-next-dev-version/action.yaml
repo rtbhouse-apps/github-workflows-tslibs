@@ -4,8 +4,11 @@ inputs:
   repository-url:
     description: "The URL of the repository to check"
     required: true
-  repository-token:
-    description: "The token to use to authenticate to the NPM repository"
+  repository-login:
+    description: "The login to use to authenticate to the NPM repository"
+    required: true
+  repository-password:
+    description: "The password to use to authenticate to the NPM repository"
     required: true
 runs:
   using: "node16"

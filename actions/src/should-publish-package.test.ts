@@ -16,7 +16,7 @@ test("shouldPublishPackage", async (t) => {
     process.chdir(tmpDir);
     mock(async () => [new semver.SemVer("0.1.0"), new semver.SemVer("0.2.0")]);
 
-    const publish = await shouldPublishPackage("dummy", "dummy");
+    const publish = await shouldPublishPackage("dummy", "dummy", "dummy");
 
     t.true(publish);
   });
@@ -28,7 +28,7 @@ test("shouldPublishPackageEmptyResponse", async (t) => {
     process.chdir(tmpDir);
     mock(async () => []);
 
-    const publish = await shouldPublishPackage("dummy", "dummy");
+    const publish = await shouldPublishPackage("dummy", "dummy", "dummy");
 
     t.true(publish);
   });
@@ -40,7 +40,7 @@ test("shouldPublishPackageThrowsError", async (t) => {
     process.chdir(tmpDir);
     mock(async () => [new semver.SemVer("0.2.0"), new semver.SemVer("0.3.0")]);
 
-    const publish = await shouldPublishPackage("dummy", "dummy");
+    const publish = await shouldPublishPackage("dummy", "dummy", "dummy");
 
     t.false(publish);
   });

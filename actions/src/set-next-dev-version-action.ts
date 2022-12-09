@@ -8,8 +8,9 @@ async function run() {
   // const repositoryUrl = core.getInput("repository-url", { required: true });
   // const repositoryToken = core.getInput("repository-token", { required: true });
   const repositoryUrl = process.env.REPOSITORY_URL;
-  const repositoryToken = process.env.REPOSITORY_TOKEN;
-  await setNextDevVersion(repositoryUrl, repositoryToken);
+  const repositoryLogin = process.env.REPOSITORY_LOGIN;
+  const repositoryPassword = process.env.REPOSITORY_PASSWORD;
+  await setNextDevVersion(repositoryUrl, repositoryLogin, repositoryPassword);
 }
 
 async function runWrapper() {

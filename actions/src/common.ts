@@ -19,14 +19,17 @@ export async function getPackageJson(): Promise<PackageJson> {
 export async function getAllPackageVersions(
   packageName: string,
   registry: string,
-  registryToken: string,
+  repositoryLogin: string,
+  repositoryPassword: string,
 ): Promise<semver.SemVer[]> {
   let pack: pacote.Packument | null = null;
   try {
     const registryUrl = new URL(registry);
     pack = await pacote.packument(packageName, {
       registry: registryUrl.toString(),
-      [`//${registryUrl.host}/:_authToken`]: registryToken,
+      [`//${registryUrl.host}${registryUrl.pathname}:always-auth`]: true,
+      [`//${registryUrl.host}${registryUrl.pathname}:username`]: repositoryLogin,
+      [`//${registryUrl.host}${registryUrl.pathname}:_password`]: repositoryPassword,
       fullMetadata: true,
     });
   } catch (err) {

@@ -9,8 +9,9 @@ async function run() {
   // const repositoryUrl = core.getInput("repository-url", { required: true });
   // const repositoryToken = core.getInput("repository-token", { required: true });
   const repositoryUrl = process.env.REPOSITORY_URL;
-  const repositoryToken = process.env.REPOSITORY_TOKEN;
-  const publish = await shouldPublishPackage(repositoryUrl, repositoryToken);
+  const repositoryLogin = process.env.REPOSITORY_LOGIN;
+  const repositoryPassword = process.env.REPOSITORY_PASSWORD;
+  const publish = await shouldPublishPackage(repositoryUrl, repositoryLogin, repositoryPassword);
   if (publish) {
     core.setOutput("publish", "1");
   } else {
