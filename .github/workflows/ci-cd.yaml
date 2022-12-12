@@ -43,8 +43,17 @@ jobs:
       - name: "Choose publish repo"
         id: "choose-publish-repo"
         run: |
-          echo "::set-output name=publish-repo-url::https://europe-west4-npm.pkg.dev/rtbhouse-apps/npm-internal/"
-          echo "::set-output name=publish-repo-secret::NPM_REGISTRY_WRITER_TOKEN"
+          if [[ "${{ inputs.publish-repository }}" == "rtbhouse-apps-internal" ]]; then
+            REPO_URL="https://europe-west4-npm.pkg.dev/rtbhouse-apps/npm-internal/"
+          elif [[ "${{ inputs.publish-repository }}" == "rtbhouse-apps-org" ]]; then
+            REPO_URL="https://europe-west4-npm.pkg.dev/rtbhouse-apps/npm-org/"
+          else
+            echo "::error::Unknown publish repo ${{ inputs.publish-repository }}"
+            exit 1
+          fi
+
+          echo "publish-repo-url=$REPO_URL" >> $GITHUB_OUTPUT
+          echo "publish-repo-secret=NPM_REGISTRY_WRITER_TOKEN" >> $GITHUB_OUTPUT
       
       - name: "Checkout"
         uses: "actions/checkout@v3"
